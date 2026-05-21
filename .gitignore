@@ -1,3 +1,5 @@
 .DS_Store
 config.json
 douyu-gift
+stderr.log
+stdout.log
