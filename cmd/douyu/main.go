@@ -3,6 +3,7 @@ package main
 import (
 	"log/slog"
 	"math/rand"
+	"net"
 	"os"
 	"time"
 
@@ -15,6 +16,12 @@ func main() {
 	slog.SetDefault(logger)
 
 	slog.Info("开始启动斗鱼荧光棒赠送程序...")
+
+	// 网络检查逻辑
+	if !waitForNetwork() {
+		slog.Error("网络检查失败，重试次数耗尽，程序退出")
+		os.Exit(1)
+	}
 
 	cfg, err := config.Load("config.json")
 	if err != nil {
@@ -98,4 +105,23 @@ func main() {
 	for _, room := range rooms {
 		slog.Info("升级经验状态", "room", room.RoomID, "anchor", room.AnchorName, "need_exp", room.ExpNeed)
 	}
+}
+
+// waitForNetwork 检查网络连接，失败则重试
+func waitForNetwork() bool {
+	for i := 1; i <= 5; i++ {
+		// 尝试连接斗鱼首页，超时时间 5s
+		conn, err := net.DialTimeout("tcp", "www.douyu.com:443", 5*time.Second)
+		if err == nil {
+			conn.Close()
+			slog.Info("网络检查通过")
+			return true
+		}
+
+		slog.Warn("网络连接异常，将在 120s 后重试", "attempt", i, "max_attempts", 5, "error", err)
+		if i < 5 {
+			time.Sleep(120 * time.Second)
+		}
+	}
+	return false
 }

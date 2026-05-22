@@ -6,7 +6,7 @@
     <string>com.douyu.glowsticks</string>
     <key>ProgramArguments</key>
     <array>
-        <string>/path/to/your/project/douyu-gift</string>
+        <string>/path/to/your/project/douyu-glowsticks</string>
     </array>
     <key>StartCalendarInterval</key>
     <dict>
