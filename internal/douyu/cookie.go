@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"douyu-glowsticks/internal/config"
+	"github.com/SakagamiJun/douyu-glowsticks/internal/config"
 
 	http "github.com/bogdanfinn/fhttp"
 	"github.com/chromedp/cdproto/network"

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"douyu-glowsticks/internal/config"
+	"github.com/SakagamiJun/douyu-glowsticks/internal/config"
 
 	"github.com/PuerkitoBio/goquery"
 	http "github.com/bogdanfinn/fhttp"

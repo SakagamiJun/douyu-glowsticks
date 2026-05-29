@@ -1,4 +1,4 @@
-module douyu-glowsticks
+module github.com/SakagamiJun/douyu-glowsticks
 
 go 1.26.3
 

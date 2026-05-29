@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
-	"douyu-glowsticks/internal/config"
-	"douyu-glowsticks/internal/douyu"
+	"github.com/SakagamiJun/douyu-glowsticks/internal/config"
+	"github.com/SakagamiJun/douyu-glowsticks/internal/douyu"
 )
 
 func main() {

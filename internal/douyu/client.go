@@ -4,7 +4,7 @@ import (
 	"errors"
 	"log/slog"
 
-	"douyu-glowsticks/internal/config"
+	"github.com/SakagamiJun/douyu-glowsticks/internal/config"
 
 	http "github.com/bogdanfinn/fhttp"
 	tls_client "github.com/bogdanfinn/tls-client"
