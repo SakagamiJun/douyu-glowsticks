@@ -2,7 +2,6 @@
 
 ![Go Version](https://img.shields.io/github/go-mod/go-version/SakagamiJun/douyu-glowsticks)
 [![Go Report Card](https://goreportcard.com/badge/github.com/SakagamiJun/douyu-glowsticks)](https://goreportcard.com/report/github.com/SakagamiJun/douyu-glowsticks)
-
 ![License](https://img.shields.io/github/license/SakagamiJun/douyu-glowsticks)
 ![Release](https://img.shields.io/github/v/release/SakagamiJun/douyu-glowsticks)
 
