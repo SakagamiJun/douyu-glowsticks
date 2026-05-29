@@ -26,7 +26,7 @@
 首次运行程序：
 
 ```bash
-./douyu-gift
+./douyu-glowsticks
 ```
 
 程序会提示 `config.json` 不存在并自动创建一个模板。
@@ -82,7 +82,7 @@ git clone git@github.com:SakagamiJun/douyu-glowsticks.git
 cd douyu-glowsticks
 
 # 编译
-go build -o douyu-gift ./cmd/douyu/main.go
+go build -o douyu-glowsticks ./cmd/douyu/main.go
 ```
 
 ## 免责声明

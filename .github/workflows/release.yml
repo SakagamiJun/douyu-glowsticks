@@ -22,20 +22,20 @@ jobs:
       - name: Build
         run: |
           mkdir -p build
-          GOOS=linux GOARCH=amd64 go build -o build/douyu-gift-linux-amd64 ./cmd/douyu/main.go
-          GOOS=windows GOARCH=amd64 go build -o build/douyu-gift-windows-amd64.exe ./cmd/douyu/main.go
-          GOOS=darwin GOARCH=amd64 go build -o build/douyu-gift-darwin-amd64 ./cmd/douyu/main.go
-          GOOS=darwin GOARCH=arm64 go build -o build/douyu-gift-darwin-arm64 ./cmd/douyu/main.go
+          GOOS=linux GOARCH=amd64 go build -o build/douyu-glowsticks-linux-amd64 ./cmd/douyu/main.go
+          GOOS=windows GOARCH=amd64 go build -o build/douyu-glowsticks-windows-amd64.exe ./cmd/douyu/main.go
+          GOOS=darwin GOARCH=amd64 go build -o build/douyu-glowsticks-darwin-amd64 ./cmd/douyu/main.go
+          GOOS=darwin GOARCH=arm64 go build -o build/douyu-glowsticks-darwin-arm64 ./cmd/douyu/main.go
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
         with:
           files: |
-            build/douyu-gift-linux-amd64
-            build/douyu-gift-windows-amd64.exe
-            build/douyu-gift-darwin-amd64
-            build/douyu-gift-darwin-arm64
+            build/douyu-glowsticks-linux-amd64
+            build/douyu-glowsticks-windows-amd64.exe
+            build/douyu-glowsticks-darwin-amd64
+            build/douyu-glowsticks-darwin-arm64
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
