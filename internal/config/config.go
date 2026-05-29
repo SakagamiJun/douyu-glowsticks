@@ -4,13 +4,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 )
 
-type Config struct {
-	Cookie  string `json:"cookie"`
-	PushKey string `json:"push_key"`
+// Cookie stores one structured browser cookie entry.
+type Cookie struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Domain string `json:"domain"`
+	Path   string `json:"path"`
 }
 
+// Config stores the local runtime configuration.
+type Config struct {
+	Cookie  string   `json:"cookie,omitempty"`
+	Cookies []Cookie `json:"cookies"`
+	PushKey string   `json:"push_key"`
+}
+
+// Load reads configuration from path and migrates legacy Cookie strings.
 func Load(path string) (*Config, error) {
 	file, err := os.ReadFile(path)
 	if err != nil {
@@ -33,11 +45,34 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("解析配置文件失败: %w", err)
 	}
 
-	if cfg.Cookie == "" || cfg.Cookie == "请在这里填入你的真实斗鱼 Cookie" {
-		return nil, fmt.Errorf("请先在 config.json 中填入真实的 Cookie")
+	// 兼容旧版本的单字符串 Cookie 配置
+	if len(cfg.Cookies) == 0 && cfg.Cookie != "" && cfg.Cookie != "请在这里填入你的真实斗鱼 Cookie" {
+		cfg.Cookies = ParseRawCookie(cfg.Cookie)
+		cfg.Cookie = "" // 清空旧的字段
+		// 自动保存为新格式
+		if err := cfg.Save(path); err != nil {
+			return nil, fmt.Errorf("迁移配置为结构化 Cookie 后保存失败: %w", err)
+		}
 	}
 
 	return &cfg, nil
+}
+
+// ParseRawCookie parses a legacy Cookie header string into structured cookies.
+func ParseRawCookie(raw string) []Cookie {
+	var cookies []Cookie
+	for _, part := range strings.Split(raw, ";") {
+		kv := strings.SplitN(strings.TrimSpace(part), "=", 2)
+		if len(kv) == 2 {
+			cookies = append(cookies, Cookie{
+				Name:   kv[0],
+				Value:  kv[1],
+				Domain: ".douyu.com", // 默认作用域
+				Path:   "/",
+			})
+		}
+	}
+	return cookies
 }
 
 // Save 将当前配置安全地写回到本地 JSON 文件

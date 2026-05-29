@@ -1,19 +1,26 @@
 package douyu
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
+	"douyu-glowsticks/internal/config"
+
 	"github.com/PuerkitoBio/goquery"
+	http "github.com/bogdanfinn/fhttp"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/chromedp"
 )
 
+// Room describes a room with a fan badge that can receive glowsticks.
 type Room struct {
 	RoomID     int
 	AnchorName string
@@ -22,16 +29,28 @@ type Room struct {
 
 // CheckLogin 检查 Cookie 是否有效
 func (c *Client) CheckLogin() bool {
-	resp, err := c.http.R().Get("https://www.douyu.com/wgapi/livenc/liveweb/follow/list")
+	req, err := http.NewRequest("GET", "https://www.douyu.com/wgapi/livenc/liveweb/follow/list", nil)
+	if err != nil {
+		slog.Error("创建登录检查请求失败", "error", err)
+		return false
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		slog.Error("登录检查请求失败", "error", err)
 		return false
 	}
+	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error("读取登录检查响应失败", "error", err)
+		return false
+	}
 	var result struct {
 		Error int `json:"error"`
 	}
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+	if err := json.Unmarshal(body, &result); err != nil {
+		slog.Error("解析登录检查响应失败", "error", err)
 		return false
 	}
 
@@ -43,11 +62,82 @@ func (c *Client) CheckLogin() bool {
 	return false
 }
 
+// InteractiveLogin opens a visible browser and captures cookies after login.
+func (c *Client) InteractiveLogin() ([]config.Cookie, error) {
+	slog.Info("启动可视化浏览器，请在弹出的窗口中扫码或输入密码登录斗鱼...")
+	opts := append(chromedp.DefaultExecAllocatorOptions[:],
+		chromedp.Flag("headless", false),
+		chromedp.Flag("disable-gpu", true),
+		chromedp.UserAgent(browserUserAgent),
+	)
+
+	allocCtx, cancel := chromedp.NewExecAllocator(context.Background(), opts...)
+	defer cancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	var newCookies []*network.Cookie
+
+	err := chromedp.Run(ctx,
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			return network.ClearBrowserCookies().Do(ctx)
+		}),
+		chromedp.Navigate("https://passport.douyu.com/index/login"),
+		chromedp.ActionFunc(func(ctx context.Context) error {
+			slog.Info("【注意】请在弹出的浏览器窗口中手动完成登录。")
+			slog.Info(">>> 程序会自动检测登录 Cookie；登录成功后也可以按【回车键 (Enter)】立即检查。 <<<")
+
+			enterPressed := make(chan struct{}, 1)
+			go waitForEnter(enterPressed)
+
+			ticker := time.NewTicker(1 * time.Second)
+			defer ticker.Stop()
+
+			for {
+				var err error
+				newCookies, err = network.GetCookies().Do(ctx)
+				if err != nil {
+					return err
+				}
+				if hasLoginCookie(newCookies) {
+					slog.Info("检测到登录 Cookie，开始保存浏览器 Cookie。")
+					return nil
+				}
+
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case <-enterPressed:
+					newCookies, err = network.GetCookies().Do(ctx)
+					if err != nil {
+						return err
+					}
+					if hasLoginCookie(newCookies) {
+						return nil
+					}
+					return fmt.Errorf("未检测到登录 Cookie acf_uid，请确认已完成登录")
+				case <-ticker.C:
+				}
+			}
+		}),
+	)
+
+	if err != nil {
+		return nil, fmt.Errorf("可视化登录失败: %w", err)
+	}
+
+	return networkCookiesToConfig(newCookies), nil
+}
+
 // ClaimGifts 模拟浏览器访问获取每日荧光棒，并提取最新的 Cookie 实现续命
-func (c *Client) ClaimGifts() (string, error) {
+func (c *Client) ClaimGifts() ([]config.Cookie, error) {
 	slog.Info("------正在获取荧光棒并尝试刷新Cookie------")
 	opts := append(chromedp.DefaultExecAllocatorOptions[:],
-		chromedp.UserAgent("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"),
+		chromedp.UserAgent(browserUserAgent),
 		chromedp.Flag("headless", true),
 		chromedp.Flag("disable-gpu", true),
 		chromedp.Flag("no-sandbox", true),
@@ -65,10 +155,17 @@ func (c *Client) ClaimGifts() (string, error) {
 
 	err := chromedp.Run(ctx,
 		chromedp.ActionFunc(func(ctx context.Context) error {
-			for _, cookie := range strings.Split(c.cookie, ";") {
-				parts := strings.SplitN(strings.TrimSpace(cookie), "=", 2)
-				if len(parts) == 2 {
-					network.SetCookie(parts[0], parts[1]).WithDomain(".douyu.com").Do(ctx)
+			if len(c.cookies) == 0 {
+				return nil
+			}
+			for _, cookie := range c.cookies {
+				domain := cookie.Domain
+				path := cookie.Path
+				if path == "" {
+					path = "/"
+				}
+				if err := network.SetCookie(cookie.Name, cookie.Value).WithDomain(domain).WithPath(path).Do(ctx); err != nil {
+					return fmt.Errorf("设置浏览器 Cookie %s 失败: %w", cookie.Name, err)
 				}
 			}
 			return nil
@@ -83,28 +180,32 @@ func (c *Client) ClaimGifts() (string, error) {
 	)
 
 	if err != nil {
-		return "", fmt.Errorf("无头浏览器访问失败: %w", err)
+		return nil, fmt.Errorf("无头浏览器访问失败: %w", err)
 	}
 
-	// 将提取出的 Cookie 对象重新组装为长字符串
-	var newCookieParts []string
-	for _, cookie := range newCookies {
-		newCookieParts = append(newCookieParts, fmt.Sprintf("%s=%s", cookie.Name, cookie.Value))
-	}
-
-	newCookieString := strings.Join(newCookieParts, "; ")
-	return newCookieString, nil
+	return networkCookiesToConfig(newCookies), nil
 }
 
 // GetOwnedGifts 获取当前背包中的荧光棒数量
 func (c *Client) GetOwnedGifts() int {
 	slog.Info("------背包检查开始------")
-	resp, err := c.http.R().Get("https://www.douyu.com/japi/prop/backpack/web/v1?rid=12306")
+	req, err := http.NewRequest("GET", "https://www.douyu.com/japi/prop/backpack/web/v1?rid=12306", nil)
+	if err != nil {
+		slog.Error("创建背包请求失败", "error", err)
+		return 0
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		slog.Error("获取背包失败", "error", err)
 		return 0
 	}
+	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error("读取背包响应失败", "error", err)
+		return 0
+	}
 	var result struct {
 		Error int `json:"error"`
 		Data  struct {
@@ -115,8 +216,12 @@ func (c *Client) GetOwnedGifts() int {
 		} `json:"data"`
 	}
 
-	if err := json.Unmarshal(resp.Body(), &result); err != nil || result.Error != 0 {
-		slog.Error("解析背包失败", "error", result.Error)
+	if err := json.Unmarshal(body, &result); err != nil {
+		slog.Error("解析背包响应失败", "error", err)
+		return 0
+	}
+	if result.Error != 0 {
+		slog.Error("背包接口返回错误", "error", result.Error)
 		return 0
 	}
 
@@ -134,12 +239,17 @@ func (c *Client) GetOwnedGifts() int {
 
 // GetRoomList 获取粉丝勋章房间列表
 func (c *Client) GetRoomList() ([]Room, error) {
-	resp, err := c.http.R().Get("https://www.douyu.com/member/cp/getFansBadgeList")
+	req, err := http.NewRequest("GET", "https://www.douyu.com/member/cp/getFansBadgeList", nil)
+	if err != nil {
+		return nil, fmt.Errorf("创建粉丝勋章请求失败: %w", err)
+	}
+	resp, err := c.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("获取粉丝勋章页面失败: %w", err)
 	}
+	defer resp.Body.Close()
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(resp.String()))
+	doc, err := goquery.NewDocumentFromReader(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("解析 HTML 失败: %w", err)
 	}
@@ -150,7 +260,11 @@ func (c *Client) GetRoomList() ([]Room, error) {
 		if !exists {
 			return
 		}
-		roomID, _ := strconv.Atoi(roomIDStr)
+		roomID, err := strconv.Atoi(roomIDStr)
+		if err != nil {
+			slog.Warn("解析房间号失败", "room", roomIDStr, "error", err)
+			return
+		}
 
 		anchorName := strings.TrimSpace(s.Find(".anchor--name").Text())
 
@@ -160,9 +274,11 @@ func (c *Client) GetRoomList() ([]Room, error) {
 		parts := strings.Split(expText, "/")
 		expNeed := 0
 		if len(parts) == 2 {
-			expNow, _ := strconv.ParseFloat(parts[0], 64)
-			expUp, _ := strconv.ParseFloat(parts[1], 64)
-			expNeed = int(expUp - expNow)
+			expNow, errNow := strconv.ParseFloat(parts[0], 64)
+			expUp, errUp := strconv.ParseFloat(parts[1], 64)
+			if errNow == nil && errUp == nil {
+				expNeed = int(expUp - expNow)
+			}
 		}
 
 		rooms = append(rooms, Room{
@@ -180,21 +296,33 @@ func (c *Client) Donate(count int, roomID int) bool {
 	donateUrl := "https://www.douyu.com/japi/prop/donate/mainsite/v2"
 	data := fmt.Sprintf(`propId=268&propCount=%d&roomId=%d&bizExt={"yzxq":{}}`, count, roomID)
 
-	resp, err := c.http.R().
-		SetHeader("Content-Type", "application/x-www-form-urlencoded").
-		SetBody(data).
-		Post(donateUrl)
+	req, err := http.NewRequest("POST", donateUrl, strings.NewReader(data))
+	if err != nil {
+		slog.Error("创建赠送请求失败", "roomId", roomID, "error", err)
+		return false
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	resp, err := c.Do(req)
 	if err != nil {
 		slog.Error("赠送请求失败", "roomId", roomID, "error", err)
 		return false
 	}
+	defer resp.Body.Close()
 
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		slog.Error("读取赠送响应失败", "roomId", roomID, "error", err)
+		return false
+	}
 	var result struct {
 		Error int    `json:"error"`
 		Msg   string `json:"msg"`
 	}
-	json.Unmarshal(resp.Body(), &result)
+	if err := json.Unmarshal(body, &result); err != nil {
+		slog.Error("解析赠送响应失败", "roomId", roomID, "error", err)
+		return false
+	}
 
 	if result.Error == 0 {
 		slog.Info(fmt.Sprintf("向房间号 %d 赠送荧光棒 %d 个成功", roomID, count))
@@ -203,4 +331,27 @@ func (c *Client) Donate(count int, roomID int) bool {
 		slog.Error(fmt.Sprintf("向房间号 %d 赠送荧光棒失败, 原因: %s", roomID, result.Msg))
 		return false
 	}
+}
+
+func waitForEnter(done chan<- struct{}) {
+	if _, err := bufio.NewReader(os.Stdin).ReadString('\n'); err != nil {
+		if err != io.EOF {
+			slog.Warn("读取终端输入失败，将继续自动检测登录状态", "error", err)
+		}
+		return
+	}
+
+	select {
+	case done <- struct{}{}:
+	default:
+	}
+}
+
+func hasLoginCookie(cookies []*network.Cookie) bool {
+	for _, c := range cookies {
+		if c.Name == "acf_uid" {
+			return true
+		}
+	}
+	return false
 }

@@ -29,29 +29,59 @@ func main() {
 		os.Exit(1)
 	}
 
-	client := douyu.NewClient(cfg.Cookie)
+	client, err := douyu.NewClient(cfg.Cookies, func(newCookies []config.Cookie) {
+		cfg.Cookies = newCookies
+		if err := cfg.Save("config.json"); err != nil {
+			slog.Error("自动保存新 Cookie 失败", "error", err)
+		} else {
+			slog.Info("自动保存新 Cookie 成功！")
+		}
+	})
+	if err != nil {
+		slog.Error("初始化斗鱼客户端失败", "error", err)
+		os.Exit(1)
+	}
 
 	slog.Info("------登录检查开始------")
 	isLogin := client.CheckLogin()
 	slog.Info("------登录检查结束------")
 
 	if !isLogin {
-		slog.Error("未登录，任务终止")
-		os.Exit(1)
+		slog.Warn("未登录或 Cookie 已失效，准备唤起浏览器进行可视化扫码登录...")
+		newCookies, err := client.InteractiveLogin()
+		if err != nil || len(newCookies) == 0 {
+			slog.Error("可视化登录失败，任务终止", "error", err)
+			os.Exit(1)
+		}
+
+		mergedCookies, changed := douyu.MergeRawCookies(cfg.Cookies, newCookies)
+		client.UpdateCookies(mergedCookies)
+		if changed {
+			slog.Info("检测到可视化登录 Cookie 生成，正在持久化到本地...")
+			cfg.Cookies = mergedCookies
+			if err := cfg.Save("config.json"); err != nil {
+				slog.Error("保存新 Cookie 失败", "error", err)
+			} else {
+				slog.Info("新 Cookie 已成功保存，恢复正常执行流程！")
+			}
+		}
 	}
 
 	// 1. 获取每日荧光棒，并捕获刷新的 Cookie
-	newCookie, err := client.ClaimGifts()
+	newCookies, err := client.ClaimGifts()
 	if err != nil {
 		slog.Error("获取每日荧光棒失败", "error", err)
-	} else if newCookie != "" && newCookie != cfg.Cookie {
-		slog.Info("检测到 Cookie 发生了刷新，正在持久化到本地...")
-		cfg.Cookie = newCookie
-		if err := cfg.Save("config.json"); err != nil {
-			slog.Error("保存新 Cookie 失败", "error", err)
-		} else {
-			slog.Info("新 Cookie 已成功保存，实现自动续命！")
-			client.UpdateCookie(newCookie) // 让后续请求也用新Cookie
+	} else if len(newCookies) > 0 {
+		mergedCookies, changed := douyu.MergeRawCookies(cfg.Cookies, newCookies)
+		if changed {
+			slog.Info("检测到 Cookie 发生了实质性刷新，正在持久化到本地...")
+			cfg.Cookies = mergedCookies
+			if err := cfg.Save("config.json"); err != nil {
+				slog.Error("保存新 Cookie 失败", "error", err)
+			} else {
+				slog.Info("新 Cookie 已成功保存，实现自动续命！")
+				client.UpdateCookies(mergedCookies) // 让后续请求也用新Cookie
+			}
 		}
 	}
 
