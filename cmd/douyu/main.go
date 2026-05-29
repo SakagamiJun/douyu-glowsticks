@@ -111,6 +111,8 @@ func main() {
 	remainder := own % len(rooms)
 
 	slog.Info("------开始捐赠荧光棒------")
+	attemptedDonations := 0
+	failedRooms := make([]int, 0)
 	for i, room := range rooms {
 		countToGive := everyGive
 		// 将余数依次分配给前面的房间，确保总数绝对精确且不会出现负数
@@ -119,7 +121,10 @@ func main() {
 		}
 
 		if countToGive > 0 {
-			client.Donate(countToGive, room.RoomID)
+			attemptedDonations++
+			if !client.Donate(countToGive, room.RoomID) {
+				failedRooms = append(failedRooms, room.RoomID)
+			}
 
 			// 防风控：随机休眠 2~5 秒，模拟真人操作（如果不是最后一个需要送礼的房间）
 			if i < len(rooms)-1 {
@@ -130,6 +135,10 @@ func main() {
 		}
 	}
 	slog.Info("------荧光棒捐赠结束------")
+	if len(failedRooms) > 0 {
+		slog.Error("部分房间赠送失败，任务以失败状态结束", "failed", len(failedRooms), "attempted", attemptedDonations, "rooms", failedRooms)
+		os.Exit(1)
+	}
 
 	// 5. 打印升级所需经验
 	for _, room := range rooms {

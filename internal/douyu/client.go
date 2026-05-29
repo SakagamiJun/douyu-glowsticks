@@ -3,7 +3,6 @@ package douyu
 import (
 	"errors"
 	"log/slog"
-	"strings"
 
 	"douyu-glowsticks/internal/config"
 
@@ -19,15 +18,6 @@ type Client struct {
 	http           tls_client.HttpClient
 	cookies        []config.Cookie
 	onCookieUpdate func([]config.Cookie)
-}
-
-// CookiesToStr 把 Cookie 结构体数组转成用于 HTTP Header 的字符串
-func CookiesToStr(cookies []config.Cookie) string {
-	var strs []string
-	for _, c := range cookies {
-		strs = append(strs, c.Name+"="+c.Value)
-	}
-	return strings.Join(strs, "; ")
 }
 
 // NewClient 初始化一个带有 Cookie 的 HTTP 客户端
@@ -88,8 +78,21 @@ func (c *Client) Do(req *http.Request) (*http.Response, error) {
 		req.Header.Set("Connection", "keep-alive")
 	}
 
+	host := ""
+	path := "/"
+	if req.URL != nil {
+		host = req.URL.Hostname()
+		if req.URL.EscapedPath() != "" {
+			path = req.URL.EscapedPath()
+		}
+	}
+
 	// 注入 Cookie
-	req.Header.Set("Cookie", CookiesToStr(c.cookies))
+	if cookieHeader := cookiesToHeader(c.cookies, host, path); cookieHeader != "" {
+		req.Header.Set("Cookie", cookieHeader)
+	} else {
+		req.Header.Del("Cookie")
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {

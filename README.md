@@ -1,6 +1,8 @@
 # 斗鱼荧光棒自动赠送工具 (Douyu Glowsticks)
 
 ![Go Version](https://img.shields.io/github/go-mod/go-version/SakagamiJun/douyu-glowsticks)
+[![Go Report Card](https://goreportcard.com/badge/github.com/SakagamiJun/douyu-glowsticks)](https://goreportcard.com/report/github.com/SakagamiJun/douyu-glowsticks)
+
 ![License](https://img.shields.io/github/license/SakagamiJun/douyu-glowsticks)
 ![Release](https://img.shields.io/github/v/release/SakagamiJun/douyu-glowsticks)
 
@@ -8,12 +10,11 @@
 
 ## 功能特性
 
-- **自动领取**：每日自动领取背包荧光棒。
-- **自动续命**：检测到 Cookie 刷新时自动更新本地配置，实现长期自动运行。
-- **智能分配**：将荧光棒平均分配给所有已加入粉丝团的房间。
-- **配置自建**：首次运行自动生成配置文件模板。
-- **跨平台支持**：支持 Windows, macOS, Linux。
-- **定时任务**：支持通过 macOS `launchd` 或其他系统的 Cron 实现定时运行。
+- **可视化登录**：检测到未登录时自动唤起 Chrome 浏览器，扫码即可完成登录并自动抓取全量 Cookie。
+- **底层抗风控**：内置 `tls-client` 模拟真实浏览器指纹，有效绕过斗鱼对 JA3/TLS 指纹的监测。
+- **结构化管理**：Cookie 采用结构化 JSON 存储，支持多域名（如关联登录）及路径精确匹配，彻底解决鉴权丢失问题。
+- **自动续命**：API 请求级别拦截并合并 `Set-Cookie` 响应，实现长期免维护自动运行。
+- **智能分配**：将荧光棒精确平均分配给所有已加入粉丝团的房间。
 
 ## 快速开始
 
@@ -31,21 +32,33 @@
 
 程序会提示 `config.json` 不存在并自动创建一个模板。
 
-### 3. 配置
+### 3. 配置与登录
 
+程序支持两种登录方式：
+
+**方式 A：交互式登录（推荐）**
+1. 直接运行程序，若检测到未登录，程序会尝试唤起浏览器。
+2. 在弹出的窗口中手动完成扫码或账号登录。
+3. 登录成功后，程序会自动捕获全量 Cookie 并保存到 `config.json`，无需手动抓包。
+
+**方式 B：手动编辑配置**
 编辑生成的 `config.json` 文件：
 
 ```json
 {
-  "cookie": "你的真实斗鱼 Cookie",
-  "push_key": "可选：微信推送 Key （未开发）"
+  "cookies": [
+    {
+      "name": "acf_uid",
+      "value": "你的值",
+      "domain": ".douyu.com",
+      "path": "/"
+    }
+  ],
+  "push_key": "可选：微信推送 Key"
 }
 ```
 
-> **如何获取 Cookie？**
-> 1. 在浏览器登录斗鱼。
-> 2. 按 F12 打开开发者工具。
-> 3. 在“网络 (Network)”标签下随便找一个请求，在请求头中找到 `cookie` 字段并复制。
+> **提示**：程序也兼容旧版的单字符串格式（如 `"cookie": "acf_uid=xxx; ..."`），首次运行时会自动迁移为最新的结构化格式。
 
 ### 4. 再次运行
 
