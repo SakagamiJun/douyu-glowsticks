@@ -43,8 +43,25 @@ func main() {
 	}
 
 	slog.Info("------登录检查开始------")
-	isLogin := client.CheckLogin()
+	var isLogin bool
+	var loginErr error
+	maxRetries := 3
+	for i := 0; i <= maxRetries; i++ {
+		isLogin, loginErr = client.CheckLogin()
+		if loginErr == nil {
+			break // 网络请求成功（无论是否登录过期），跳出重试循环
+		}
+		if i < maxRetries {
+			slog.Warn("登录检查网络请求失败，等待重试", "retry", i+1, "maxRetries", maxRetries, "wait", "5m")
+			time.Sleep(5 * time.Minute)
+		}
+	}
 	slog.Info("------登录检查结束------")
+
+	if loginErr != nil {
+		slog.Error("登录检查经过多次重试依然失败，疑似网络环境异常，任务中止", "error", loginErr)
+		os.Exit(1)
+	}
 
 	if !isLogin {
 		slog.Warn("未登录或 Cookie 已失效，准备唤起浏览器进行可视化扫码登录...")

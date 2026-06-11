@@ -27,39 +27,39 @@ type Room struct {
 	ExpNeed    int
 }
 
-// CheckLogin 检查 Cookie 是否有效
-func (c *Client) CheckLogin() bool {
+// CheckLogin 检查 Cookie 是否有效，返回 (是否登录成功, 网络/系统错误)
+func (c *Client) CheckLogin() (bool, error) {
 	req, err := http.NewRequest("GET", "https://www.douyu.com/wgapi/livenc/liveweb/follow/list", nil)
 	if err != nil {
 		slog.Error("创建登录检查请求失败", "error", err)
-		return false
+		return false, err
 	}
 	resp, err := c.Do(req)
 	if err != nil {
 		slog.Error("登录检查请求失败", "error", err)
-		return false
+		return false, err
 	}
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		slog.Error("读取登录检查响应失败", "error", err)
-		return false
+		return false, err
 	}
 	var result struct {
 		Error int `json:"error"`
 	}
 	if err := json.Unmarshal(body, &result); err != nil {
 		slog.Error("解析登录检查响应失败", "error", err)
-		return false
+		return false, err
 	}
 
 	if result.Error == 0 {
 		slog.Info("Cookie有效, 登陆成功")
-		return true
+		return true, nil
 	}
 	slog.Error("登陆失败, 请检查Cookie有效性")
-	return false
+	return false, nil
 }
 
 // InteractiveLogin opens a visible browser and captures cookies after login.
