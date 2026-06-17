@@ -89,7 +89,18 @@ func main() {
 	if err != nil {
 		slog.Error("获取每日荧光棒失败", "error", err)
 	} else if len(newCookies) > 0 {
-		mergedCookies, changed := douyu.MergeRawCookies(cfg.Cookies, newCookies)
+		// 新增：Cookie 隔离防污染过滤墙
+		var safeCookies []config.Cookie
+		for _, c := range newCookies {
+			// 如果是核心鉴权凭证，绝对不允许被无头浏览器的结果覆盖
+			if c.Name == "acf_auth" || c.Name == "dy_did" || c.Name == "acf_uid" {
+				slog.Debug("防污染拦截：丢弃无头浏览器返回的核心 Cookie", "name", c.Name)
+				continue
+			}
+			safeCookies = append(safeCookies, c)
+		}
+
+		mergedCookies, changed := douyu.MergeRawCookies(cfg.Cookies, safeCookies)
 		if changed {
 			slog.Info("检测到 Cookie 发生了实质性刷新，正在持久化到本地...")
 			cfg.Cookies = mergedCookies
