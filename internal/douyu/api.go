@@ -243,6 +243,10 @@ func (c *Client) GetRoomList() ([]Room, error) {
 	if err != nil {
 		return nil, fmt.Errorf("创建粉丝勋章请求失败: %w", err)
 	}
+
+	// 强化 Referer 伪装，避免触发 member 域的跨域拦截
+	req.Header.Set("Referer", "https://www.douyu.com/member/cp")
+
 	resp, err := c.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("获取粉丝勋章页面失败: %w", err)
