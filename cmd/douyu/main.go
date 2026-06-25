@@ -13,11 +13,13 @@ import (
 	"github.com/SakagamiJun/douyu-glowsticks/internal/douyu"
 )
 
+var Version = "dev"
+
 func main() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
 	slog.SetDefault(logger)
 
-	slog.Info("开始启动斗鱼荧光棒赠送程序...")
+	slog.Info("开始启动斗鱼荧光棒赠送程序...", "version", Version)
 
 	// 网络检查逻辑
 	if !waitForNetwork() {

@@ -22,10 +22,11 @@ jobs:
       - name: Build
         run: |
           mkdir -p build
-          GOOS=linux GOARCH=amd64 go build -o build/douyu-glowsticks-linux-amd64 ./cmd/douyu/main.go
-          GOOS=windows GOARCH=amd64 go build -o build/douyu-glowsticks-windows-amd64.exe ./cmd/douyu/main.go
-          GOOS=darwin GOARCH=amd64 go build -o build/douyu-glowsticks-darwin-amd64 ./cmd/douyu/main.go
-          GOOS=darwin GOARCH=arm64 go build -o build/douyu-glowsticks-darwin-arm64 ./cmd/douyu/main.go
+          LDFLAGS="-s -w -X 'main.Version=${GITHUB_REF_NAME}'"
+          GOOS=linux GOARCH=amd64 go build -ldflags="$LDFLAGS" -o build/douyu-glowsticks-linux-amd64 ./cmd/douyu/main.go
+          GOOS=windows GOARCH=amd64 go build -ldflags="$LDFLAGS" -o build/douyu-glowsticks-windows-amd64.exe ./cmd/douyu/main.go
+          GOOS=darwin GOARCH=amd64 go build -ldflags="$LDFLAGS" -o build/douyu-glowsticks-darwin-amd64 ./cmd/douyu/main.go
+          GOOS=darwin GOARCH=arm64 go build -ldflags="$LDFLAGS" -o build/douyu-glowsticks-darwin-arm64 ./cmd/douyu/main.go
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
