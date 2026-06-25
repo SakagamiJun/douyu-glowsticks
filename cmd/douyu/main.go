@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"strings"
+
 	"time"
 
 	"github.com/SakagamiJun/douyu-glowsticks/internal/config"
@@ -92,9 +94,9 @@ func main() {
 		// 新增：Cookie 隔离防污染过滤墙
 		var safeCookies []config.Cookie
 		for _, c := range newCookies {
-			// 如果是核心鉴权凭证，绝对不允许被无头浏览器的结果覆盖
-			if c.Name == "acf_auth" || c.Name == "dy_did" || c.Name == "acf_uid" {
-				slog.Debug("防污染拦截：丢弃无头浏览器返回的核心 Cookie", "name", c.Name)
+			// 扩大拦截范围：所有斗鱼业务和鉴权相关的 Cookie 都不允许被无头浏览器污染
+			if strings.HasPrefix(c.Name, "acf_") || strings.HasPrefix(c.Name, "dy_") {
+				slog.Debug("防污染拦截：丢弃无头浏览器返回的业务/核心 Cookie", "name", c.Name)
 				continue
 			}
 			safeCookies = append(safeCookies, c)
